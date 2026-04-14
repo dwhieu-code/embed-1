@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unique Name Scratch</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ticket-yellow: #fbc531;
+            --bg-dark: #0f172a;
+            --sold-bg: #334155;
+        }
+
+        body {
+            background: var(--bg-dark);
+            font-family: 'Montserrat', sans-serif;
+            color: white; margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        h1 { font-size: 2.2rem; margin-bottom: 5px; color: var(--ticket-yellow); }
+        .sub-title { color: #64748b; margin-bottom: 20px; font-size: 0.9rem; }
+
+        .history-board {
+            display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+            margin-bottom: 30px; min-height: 50px; padding: 15px;
+            background: rgba(255,255,255,0.05); border-radius: 15px; width: 100%; max-width: 900px;
+        }
+
+        .winner-tag {
+            padding: 6px 12px; background: #10b981; border-radius: 6px; font-size: 0.8rem;
+            animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+        .ticket-grid {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px;
+        }
+
+        .ticket {
+            width: 170px; height: 90px; background: var(--ticket-yellow);
+            border-radius: 12px; position: relative; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4); transition: 0.2s;
+        }
+
+        .ticket::before, .ticket::after {
+            content: ''; position: absolute; width: 16px; height: 16px;
+            background: var(--bg-dark); border-radius: 50%; top: 50%; transform: translateY(-50%);
+        }
+        .ticket::before { left: -8px; } .ticket::after { right: -8px; }
+
+        .ticket-content {
+            border-top: 2px solid #000; border-bottom: 2px solid #000;
+            padding: 5px 15px; color: #000; text-align: center; width: 70%;
+        }
+
+        .stars { font-size: 0.6rem; letter-spacing: 2px; margin: 2px 0; color: #000; }
+        .ticket-label { font-weight: 900; font-size: 0.85rem; }
+
+        .ticket:hover { transform: translateY(-5px); box-shadow: 0 10px 20px var(--ticket-yellow); }
+
+        .ticket.sold-out {
+            background: var(--sold-bg); opacity: 0.3; cursor: not-allowed; filter: grayscale(1);
+        }
+
+        .overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.9); z-index: 100;
+            align-items: center; justify-content: center; backdrop-filter: blur(10px);
+        }
+        .overlay.active { display: flex; }
+
+        .ticket-big {
+            width: 500px; height: 260px; background: var(--ticket-yellow);
+            border-radius: 30px; position: relative; display: flex; align-items: center; justify-content: center;
+        }
+
+        .ticket-big::before, .ticket-big::after {
+            content: ''; position: absolute; width: 30px; height: 30px;
+            background: #000; border-radius: 50%; top: 50%; transform: translateY(-50%);
+        }
+        .ticket-big::before { left: -15px; } .ticket-big::after { right: -15px; }
+
+        .scratch-area {
+            width: 80%; height: 70%; position: relative;
+            background: #fff; border-radius: 15px; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .name-result { color: #000; font-size: 2rem; font-weight: 900; text-align: center; padding: 10px; }
+
+        #canvas { position: absolute; top: 0; left: 0; z-index: 10; touch-action: none; }
+
+        .close-btn { position: absolute; top: -50px; right: 0; color: white; font-size: 2.5rem; cursor: pointer; background: none; border: none; }
+
+        /* Style cho dòng chữ ở góc phải dưới cùng */
+        .footer-credit {
+            position: fixed;
+            bottom: 15px;
+            right: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #475569;
+            text-transform: lowercase;
+            pointer-events: none;
+            z-index: 99;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Cào đứa nào đi đứa đó!!!!🎫</h1>
+    <p class="sub-title" id="counterDisplay">Đang tải danh sách...</p>
+    <div class="history-board" id="hBoard"></div>
+
+    <div class="ticket-grid" id="grid"></div>
+
+    <div class="overlay" id="overlay">
+        <div class="ticket-big">
+            <button class="close-btn" onclick="closeScratch()">×</button>
+            <div class="scratch-area">
+                <div class="name-result" id="nameValue">...</div>
+                <canvas id="canvas" width="400" height="182"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-credit">made by @duchieu</div>
+
+    <script>
+        // DANH SÁCH TÊN GỐC
+        let NAME_LIST = [
+            "Dương Thị Hồng Anh", "Vũ Đức Anh", "Nguyễn Thị Quỳnh Ánh", "Nguyễn Xuân Bách",
+            "Đỗ Quốc Bảo", "Nguyễn Ngọc Bảo", "Nguyễn Thị Minh Châu", "Nguyễn Duy Chiến",
+            "Phạm Khánh Chung", "Nguyễn Ngọc Diệp", "Nguyễn Huyền Diệu", "Nguyễn Việt Đức",
+            "Lê Duy Tùng Dương", "Nguyễn Đức Duy", "Tạ Hương Giang", "Chu Thị Bảo Hân",
+            "Dương Gia Hân", "Trần Minh Hằng", "Nguyễn Hữu Đức Hiếu", "Lê Việt Hưng",
+            "Đỗ Duy Hưởng", "Nguyễn Gia Huy", "Phạm Gia Huy", "Hoàng Gia Khánh",
+            "Nguyễn Duy Khánh", "Phạm Đăng Khoa", "Nguyễn Tùng Lâm", "Nguyễn Hoàng Lân",
+            "Hoàng Đức Mạnh", "Nguyễn Thị Tâm Như", "Nguyễn Thị Hồng Nhung", "Nguyễn Minh Phương",
+            "Đỗ Minh Quân", "Nguyễn Hoàng Quân", "Nguyễn Minh Quân", "Nguyễn Minh Quang",
+            "Trần Hoàng Sơn", "Lê Thanh", "Phạm Phương Thảo", "Dương Anh Toàn",
+            "Nguyễn Kim Toàn", "Nguyễn Thị Kiều Trang", "Nguyễn Thị Thu Trang", "Bùi Thiên Trường",
+            "Đào Thị Tường Vy", "Nguyễn Đức Duy"
+        ];
+
+        const grid = document.getElementById('grid');
+        const hBoard = document.getElementById('hBoard');
+        const overlay = document.getElementById('overlay');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const counterDisplay = document.getElementById('counterDisplay');
+
+        let isDrawing = false;
+        let currentTicket = null;
+        let pickedName = "";
+
+        function updateCounter() {
+            counterDisplay.innerText = `Còn lại ${NAME_LIST.length} người chưa được chọn`;
+        }
+
+        for (let i = 1; i <= 30; i++) {
+            const t = document.createElement('div');
+            t.className = 'ticket';
+            t.innerHTML = `
+                <div class="stars">★★★</div>
+                <div class="ticket-content">
+                    <div class="ticket-label">TICKET ${i}</div>
+                </div>
+                <div class="stars">★★★</div>
+            `;
+            t.onclick = () => openScratch(t);
+            grid.appendChild(t);
+        }
+
+        function openScratch(el) {
+            if (el.classList.contains('sold-out')) return;
+            if (NAME_LIST.length === 0) {
+                Swal.fire('Hết danh sách!', 'Tất cả mọi người đều đã được chọn.', 'info');
+                return;
+            }
+            currentTicket = el;
+            const randomIndex = Math.floor(Math.random() * NAME_LIST.length);
+            pickedName = NAME_LIST.splice(randomIndex, 1)[0];
+            document.getElementById('nameValue').innerText = pickedName;
+            overlay.classList.add('active');
+            updateCounter();
+            initCanvas();
+        }
+
+        function closeScratch() { overlay.classList.remove('active'); }
+
+        function initCanvas() {
+            ctx.globalCompositeOperation = 'source-over';
+            const grad = ctx.createLinearGradient(0, 0, 400, 182);
+            grad.addColorStop(0, '#e1b12c'); grad.addColorStop(0.5, '#fbc531'); grad.addColorStop(1, '#e1b12c');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000';
+            ctx.font = '900 20px Montserrat';
+            ctx.textAlign = 'center';
+            ctx.fillText('Tên ải tên ai ?!', 200, 100);
+            ctx.globalCompositeOperation = 'destination-out';
+        }
+
+        function scratch(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+            const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+            ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI * 2); ctx.fill();
+            checkFinish();
+        }
+
+        function checkFinish() {
+            const data = ctx.getImageData(0, 0, 400, 182).data;
+            let count = 0;
+            for (let i = 3; i < data.length; i += 4) if (data[i] === 0) count++;
+            if (count / (400 * 182) > 0.45) {
+                isDrawing = false;
+                ctx.clearRect(0, 0, 400, 182);
+                done();
+            }
+        }
+
+        function done() {
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            currentTicket.classList.add('sold-out');
+            const s = document.createElement('span');
+            s.className = 'winner-tag';
+            s.innerText = pickedName;
+            hBoard.appendChild(s);
+            setTimeout(() => {
+                Swal.fire({
+                    title: 'Đã xác định mục tiêu 🔫',
+                    text: pickedName,
+                    icon: 'success',
+                    confirmButtonColor: '#0f172a'
+                }).then(closeScratch);
+            }, 500);
+        }
+
+        canvas.addEventListener('mousedown', () => isDrawing = true);
+        window.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mousemove', scratch);
+        canvas.addEventListener('touchstart', (e) => { isDrawing = true; e.preventDefault(); });
+        canvas.addEventListener('touchend', () => isDrawing = false);
+        canvas.addEventListener('touchmove', (e) => { scratch(e); e.preventDefault(); });
+
+        updateCounter();
+    </script>
+</body>
+</html>
